@@ -3,9 +3,13 @@ package com.aivy.app.plugins;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
+import android.util.Base64;
+import android.util.Size;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -14,6 +18,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.io.ByteArrayOutputStream;
 
 /**
  * MusicScannerPlugin
@@ -130,6 +135,8 @@ public class MusicScannerPlugin extends Plugin {
                     track.put("sizeBytes", cursor.getLong(sizeCol));
                     track.put("path", cursor.getString(dataCol) != null ? cursor.getString(dataCol) : "");
                     track.put("uri", contentUri.toString());
+                    String artwork = extractArtworkBase64(contentUri);
+                    track.put("artwork", artwork != null ? artwork : "");
                     tracks.put(track);
                 }
             }
@@ -141,5 +148,55 @@ public class MusicScannerPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Failed to scan MediaStore: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Reads the embedded album art for one track, if any, and returns it as a
+     * base64 JPEG data URI so the JS side can drop it straight into an <img>
+     * or CSS background without a second round-trip.
+     *
+     * On Android 10+ we use ContentResolver#loadThumbnail, which is the
+     * scoped-storage-safe way to get a small preview image for a MediaStore
+     * item. On older versions (or if that fails, e.g. no embedded art), we
+     * fall back to MediaMetadataRetriever reading the file's own ID3/embedded
+     * picture tag directly.
+     */
+    private String extractArtworkBase64(Uri itemUri) {
+        Bitmap bitmap = null;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                bitmap = getContext().getContentResolver().loadThumbnail(itemUri, new Size(300, 300), null);
+            } catch (Exception e) {
+                bitmap = null; // No embedded art, or the OS couldn't generate one — fall back below.
+            }
+        }
+
+        if (bitmap != null) {
+            try {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out);
+                return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+            } catch (Exception e) {
+                return null;
+            } finally {
+                bitmap.recycle();
+            }
+        }
+
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(getContext(), itemUri);
+            byte[] embedded = retriever.getEmbeddedPicture();
+            if (embedded != null && embedded.length > 0) {
+                return "data:image/jpeg;base64," + Base64.encodeToString(embedded, Base64.NO_WRAP);
+            }
+        } catch (Exception ignored) {
+            // File has no readable embedded art — that's fine, thumbnail just stays null.
+        } finally {
+            try { retriever.release(); } catch (Exception ignored) { }
+        }
+
+        return null;
     }
 }

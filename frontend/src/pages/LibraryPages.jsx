@@ -371,11 +371,20 @@ export function PlaylistPage() {
 }
 
 export function LibraryLocalPage() {
-  const { localTracks, localScan, scanLocalFiles, clearLocalLibrary, playList } = usePlayer();
+  const { localTracks, localScan, scanLocalFiles, scanLocalNative, clearLocalLibrary, isNativeAndroid, playList } = usePlayer();
   const { t } = useUI();
   const fileInputRef = useRef(null);
 
-  const handlePick = () => fileInputRef.current?.click();
+  const handlePick = () => {
+    // Di aplikasi Android: scan langsung lewat MediaStore, tidak perlu
+    // dialog pilih folder. Di web (browser): tetap pakai folder picker,
+    // karena browser tidak mengizinkan akses filesystem tanpa itu.
+    if (isNativeAndroid) {
+      scanLocalNative();
+      return;
+    }
+    fileInputRef.current?.click();
+  };
   const handleChange = (e) => {
     const files = e.target.files;
     if (files && files.length) scanLocalFiles(files);
@@ -396,7 +405,9 @@ export function LibraryLocalPage() {
           <div className="sub" style={{ color: "var(--ink-faint)", fontSize: 13 }}>
             {localTracks.length > 0
               ? `${localTracks.length} lagu \u00b7 ${totalDurationLabel} \u00b7 dari perangkat ini`
-              : "Pindai folder musik di perangkatmu (file di atas 1 menit dianggap lagu)"}
+              : isNativeAndroid
+                ? "Pindai otomatis semua lagu di perangkatmu (file di atas 1 menit dianggap lagu)"
+                : "Pindai folder musik di perangkatmu (file di atas 1 menit dianggap lagu)"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -406,7 +417,7 @@ export function LibraryLocalPage() {
             </button>
           )}
           <button className="aivy-btn-primary" onClick={handlePick} disabled={localScan.scanning}>
-            {localScan.scanning ? <><Loader2 size={15} className="aivy-spin" /> Memindai...</> : <><FolderSearch size={15} /> {localTracks.length ? "Pindai ulang" : "Pindai folder musik"}</>}
+            {localScan.scanning ? <><Loader2 size={15} className="aivy-spin" /> Memindai...</> : <><FolderSearch size={15} /> {localTracks.length ? "Pindai ulang" : (isNativeAndroid ? "Pindai musik" : "Pindai folder musik")}</>}
           </button>
         </div>
       </div>
@@ -425,8 +436,14 @@ export function LibraryLocalPage() {
 
       {localScan.scanning && (
         <div className="aivy-import-tutorial" style={{ marginBottom: 16 }}>
-          <div className="head"><Loader2 size={15} className="aivy-spin" color="var(--moss-strong)" /> Memindai {localScan.checked} / {localScan.total} file...</div>
-          <div className="sub" style={{ fontSize: 13, marginTop: 4 }}>{localScan.found} lagu ditemukan sejauh ini (file di bawah 1 menit dilewati).</div>
+          {isNativeAndroid ? (
+            <div className="head"><Loader2 size={15} className="aivy-spin" color="var(--moss-strong)" /> Memindai musik di perangkat...</div>
+          ) : (
+            <>
+              <div className="head"><Loader2 size={15} className="aivy-spin" color="var(--moss-strong)" /> Memindai {localScan.checked} / {localScan.total} file...</div>
+              <div className="sub" style={{ fontSize: 13, marginTop: 4 }}>{localScan.found} lagu ditemukan sejauh ini (file di bawah 1 menit dilewati).</div>
+            </>
+          )}
         </div>
       )}
 
@@ -434,7 +451,11 @@ export function LibraryLocalPage() {
         <div className="aivy-empty">
           <FolderOpen size={32} color="var(--ink-faint)" style={{ marginBottom: 8 }} />
           <div className="title">Belum ada lagu lokal</div>
-          <div className="sub">Ketuk "Pindai folder musik", lalu pilih folder tempat lagu-lagumu disimpan. Cosmicx akan otomatis melewati file di bawah 1 menit.</div>
+          <div className="sub">
+            {isNativeAndroid
+              ? "Ketuk \"Pindai musik\" — Cosmicx akan minta izin akses musik lalu otomatis menemukan semua lagu di HP-mu. File di bawah 1 menit dilewati."
+              : "Ketuk \"Pindai folder musik\", lalu pilih folder tempat lagu-lagumu disimpan. Cosmicx akan otomatis melewati file di bawah 1 menit."}
+          </div>
         </div>
       )}
 

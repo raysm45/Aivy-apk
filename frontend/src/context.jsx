@@ -10,6 +10,7 @@ import { clamp, uid, debounce, pickBestAudioMatch } from "./lib/utils.js";
 import { makeT } from "./lib/i18n.js";
 import { useDiscordActivity } from "./lib/discordActivity.js";
 import { enableBackgroundAudio, disableBackgroundAudio } from "./lib/backgroundAudio.js";
+import { isNativeAndroid, scanLocalTracks, localTrackToAppTrack } from "./lib/localMusic.js";
 
 export const EQ_BANDS_HZ = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 export const EQ_PRESETS = {
@@ -1041,6 +1042,40 @@ export function PlayerProvider({ children }) {
     pushToast(`${results.length} lagu ditemukan (di atas 1 menit)`);
   }, [pushToast, t]);
 
+  // Versi Android native: scan otomatis lewat MediaStore (izin "Musik dan audio"),
+  // TIDAK perlu user memilih folder secara manual seperti di web.
+  const scanLocalNative = useCallback(async () => {
+    setLocalScan({ scanning: true, checked: 0, total: 0, found: 0 });
+    try {
+      const nativeTracks = await scanLocalTracks({ minDurationMs: LOCAL_MIN_DURATION_SECONDS * 1000 });
+      const results = nativeTracks.map((raw) => {
+        const mapped = localTrackToAppTrack(raw);
+        return {
+          id: mapped.id,
+          title: mapped.title,
+          artist: { name: mapped.artist || "Perangkat saya" },
+          cover: mapped.artwork || null,
+          duration: mapped.duration,
+          // content:// URI dari MediaStore dipakai langsung sebagai src <audio>,
+          // sama seperti localUrl (object URL) di alur pemilihan folder web.
+          localUrl: mapped.streamUrl,
+          fileExt: mapped.fileExt || null,
+          source: "local",
+        };
+      });
+      setLocalScan({ scanning: true, checked: results.length, total: results.length, found: results.length });
+      setLocalTracks((prev) => {
+        const knownIds = new Set(prev.map((tr) => tr.id));
+        return [...prev, ...results.filter((r) => !knownIds.has(r.id))];
+      });
+      pushToast(`${results.length} lagu ditemukan (di atas 1 menit)`);
+    } catch (err) {
+      pushToast(err?.message || "Gagal memindai musik di perangkat.");
+    } finally {
+      setLocalScan((s) => ({ ...s, scanning: false }));
+    }
+  }, [pushToast]);
+
   const clearLocalLibrary = useCallback(() => {
     localObjectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     localObjectUrlsRef.current = [];
@@ -1654,7 +1689,7 @@ export function PlayerProvider({ children }) {
     room, publicRooms, roomError, refreshPublicRooms, createRoom, joinRoom, leaveRoom,
     chatMessages, sendChatMessage, voteSkip,
     promptCast, getAudioSrc,
-    localTracks, localScan, scanLocalFiles, clearLocalLibrary,
+    localTracks, localScan, scanLocalFiles, scanLocalNative, clearLocalLibrary, isNativeAndroid: isNativeAndroid(),
   };
   return <PlayerCtx.Provider value={value}>{children}</PlayerCtx.Provider>;
 }

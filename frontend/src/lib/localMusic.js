@@ -74,8 +74,31 @@ export function localTrackToAppTrack(nativeTrack) {
     album: nativeTrack.album,
     duration: Math.round((nativeTrack.durationMs || 0) / 1000),
     source: "local",
-    // Feed this straight into audioRef.current.src in context.jsx
-    streamUrl: nativeTrack.uri,
-    artwork: null,
+    // Feed this straight into audioRef.current.src in context.jsx.
+    //
+    // IMPORTANT: we can't use the raw content:// URI here. The app's WebView
+    // loads pages as an https:// origin (see capacitor.config.json), and
+    // Chrome refuses to load content:// (or file://) resources from an
+    // http(s) origin ("Not allowed to load local resource") — this is why
+    // scanned tracks showed up but silently failed to play.
+    //
+    // Capacitor.convertFileSrc() rewrites a real filesystem path into a
+    // special https://localhost/_capacitor_file_/... URL that Capacitor's
+    // own WebView bridge intercepts and streams the file bytes for, which
+    // *is* allowed since it looks like same-origin. MediaStore gives us that
+    // real path in `path`, so we prefer it and only fall back to the
+    // content:// URI (which may still work on some OEM WebViews) if for some
+    // reason no path was available.
+    streamUrl: nativeTrack.path
+      ? Capacitor.convertFileSrc(nativeTrack.path)
+      : nativeTrack.uri,
+    fileExt: extOf(nativeTrack.path),
+    artwork: nativeTrack.artwork || null,
   };
+}
+
+function extOf(path) {
+  if (!path) return null;
+  const match = /\.([a-z0-9]+)$/i.exec(path);
+  return match ? match[1].toLowerCase() : null;
 }
