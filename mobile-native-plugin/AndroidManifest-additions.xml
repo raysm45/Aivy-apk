@@ -1,0 +1,32 @@
+<!--
+  Tambahkan blok-blok ini ke android/app/src/main/AndroidManifest.xml
+  (dibuat otomatis saat `npx cap add android`).
+-->
+
+<!-- ============ Taruh di dalam <manifest> tag, SEBELUM <application> ============ -->
+
+<!-- Untuk scan semua file lagu di HP -->
+<!-- Android 13+ (API 33+) -->
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+<!-- Android 12 ke bawah (fallback) -->
+<uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+
+<!-- Untuk foreground service (musik tetap jalan di background) -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<!-- Wajib di Android 13+ untuk menampilkan notifikasi player -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<!-- Kalau backend kamu jalan di http (bukan https) waktu development -->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+
+<!-- ============ Taruh di dalam <application> tag ============ -->
+<!-- @anuradev/capacitor-background-mode mendaftarkan service-nya sendiri
+     otomatis lewat manifest merge — tidak perlu tambahan manual di sini. -->
+
