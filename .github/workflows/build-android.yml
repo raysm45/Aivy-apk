@@ -1,0 +1,83 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install JS dependencies
+        run: npm install
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Install native MusicScanner plugin
+        run: |
+          mkdir -p android/app/src/main/java/com/aivy/app/plugins
+          cp ../mobile-native-plugin/MusicScannerPlugin.java android/app/src/main/java/com/aivy/app/plugins/
+
+      - name: Register plugin in MainActivity
+        run: |
+          cat > android/app/src/main/java/com/aivy/app/MainActivity.java << 'EOF'
+          package com.aivy.app;
+
+          import android.os.Bundle;
+          import com.aivy.app.plugins.MusicScannerPlugin;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(MusicScannerPlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+          }
+          EOF
+
+      - name: Add required permissions to AndroidManifest.xml
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i '/<manifest /a\
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\
+              <uses-permission android:name="android.permission.WAKE_LOCK" />' "$MANIFEST"
+          cat "$MANIFEST"
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivy-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
