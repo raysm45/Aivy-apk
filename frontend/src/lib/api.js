@@ -92,6 +92,10 @@ export const Api = {
   logout: () => apiSend("/auth/logout", "POST"),
   discordLoginUrl: () => `${API_BASE}/auth/discord`,
   googleLoginUrl: () => `${API_BASE}/auth/google`,
+  // Called after the native app catches the cosmicx://auth deep link.
+  // Must be requested from inside the app's own WebView (not the external
+  // browser) so the Set-Cookie response actually lands in the app's cookie jar.
+  exchangeTicket: (ticket) => apiGet(`/auth/exchange?ticket=${encodeURIComponent(ticket)}`),
 
   likes: () => apiGet("/api/me/likes"),
   like: (videoId, meta) => apiSend(`/api/me/likes/${encodeURIComponent(videoId)}`, "POST", meta),

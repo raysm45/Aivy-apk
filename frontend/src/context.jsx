@@ -2,6 +2,9 @@ import React, {
   createContext, useContext, useState, useEffect, useRef, useMemo, useCallback,
 } from "react";
 import { io } from "socket.io-client";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
+import { App as CapacitorApp } from "@capacitor/app";
 import { Api, API_BASE } from "./lib/api.js";
 import { clamp, uid, debounce, pickBestAudioMatch } from "./lib/utils.js";
 import { makeT } from "./lib/i18n.js";
@@ -144,6 +147,7 @@ export function UIProvider({ children }) {
       .finally(() => setAuthChecked(true));
   }, []);
 
+
   useEffect(() => {
     if (!authUser) return;
     Api.getSettings()
@@ -225,8 +229,45 @@ export function UIProvider({ children }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2800);
   }, []);
 
-  const login = useCallback(() => { window.location.href = Api.discordLoginUrl(); }, []);
-  const loginGoogle = useCallback(() => { window.location.href = Api.googleLoginUrl(); }, []);
+  const login = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      Browser.open({ url: `${Api.discordLoginUrl()}?platform=app` });
+      return;
+    }
+    window.location.href = Api.discordLoginUrl();
+  }, []);
+  const loginGoogle = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      Browser.open({ url: `${Api.googleLoginUrl()}?platform=app` });
+      return;
+    }
+    window.location.href = Api.googleLoginUrl();
+  }, []);
+
+  // Native-only: on web, Discord/Google login just redirects the page and the
+  // backend's Set-Cookie comes back on the same origin, so it works as-is. On
+  // native, login() above opens an in-app browser tab instead (see above).
+  // The backend can't hand that tab a cookie the app's own WebView can read,
+  // so instead it redirects the tab to cosmicx://auth?ticket=... when done.
+  // We catch that redirect here, close the tab, and exchange the one-time
+  // ticket for a real session cookie via a request made from inside the app.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const sub = CapacitorApp.addListener("appUrlOpen", ({ url }) => {
+      let parsed;
+      try { parsed = new URL(url); } catch { return; }
+      if (parsed.protocol !== "cosmicx:") return;
+      const ticket = parsed.searchParams.get("ticket");
+      const error = parsed.searchParams.get("error");
+      Browser.close().catch(() => {});
+      if (error) { pushToast(t("discord_denied", "Login dibatalkan.")); return; }
+      if (!ticket) return;
+      Api.exchangeTicket(ticket)
+        .then((u) => setAuthUser(u))
+        .catch(() => pushToast(t("login_failed", "Gagal masuk, coba lagi.")));
+    });
+    return () => { sub.then((s) => s.remove()).catch(() => {}); };
+  }, [pushToast, t]);
   const loggingOutRef = useRef(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const logout = useCallback(async () => {

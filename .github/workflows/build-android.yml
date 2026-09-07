@@ -32,6 +32,14 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Apply CosmicX app icon
+        run: |
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp android-icons/mipmap-$density/ic_launcher.png            android/app/src/main/res/mipmap-$density/ic_launcher.png
+            cp android-icons/mipmap-$density/ic_launcher_round.png      android/app/src/main/res/mipmap-$density/ic_launcher_round.png
+            cp android-icons/mipmap-$density/ic_launcher_foreground.png android/app/src/main/res/mipmap-$density/ic_launcher_foreground.png
+          done
+
       - name: Install native MusicScanner plugin
         run: |
           mkdir -p android/app/src/main/java/com/aivy/app/plugins
@@ -55,7 +63,7 @@ jobs:
           }
           EOF
 
-      - name: Add required permissions to AndroidManifest.xml
+      - name: Add required permissions & deep link intent-filter to AndroidManifest.xml
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           sed -i '/<manifest /a\
@@ -65,6 +73,16 @@ jobs:
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\
               <uses-permission android:name="android.permission.WAKE_LOCK" />' "$MANIFEST"
+          # Lets the app catch cosmicx://auth?ticket=... after Discord/Google
+          # login finishes in the in-app browser tab, instead of the redirect
+          # being stranded in that tab.
+          sed -i 's|</activity>|<intent-filter>\
+              <action android:name="android.intent.action.VIEW" />\
+              <category android:name="android.intent.category.DEFAULT" />\
+              <category android:name="android.intent.category.BROWSABLE" />\
+              <data android:scheme="cosmicx" />\
+            </intent-filter>\
+          </activity>|' "$MANIFEST"
           cat "$MANIFEST"
 
       - name: Sync Capacitor

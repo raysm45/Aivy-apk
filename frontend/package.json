@@ -14,6 +14,7 @@
     "@anuradev/capacitor-background-mode": "^7.2.1",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
+    "@capacitor/browser": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@discord/embedded-app-sdk": "^2.5.0",
     "lit": "^3.1.4",
